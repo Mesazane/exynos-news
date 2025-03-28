@@ -5,51 +5,85 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write  # Grants GITHUB_TOKEN write access
+  contents: write
 
 jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout with persistent credentials
       - uses: actions/checkout@v4
         with:
-          persist-credentials: true  # Essential for push access
-          fetch-depth: 0            # Get full history for proper dating
+          persist-credentials: true
+          fetch-depth: 0
 
-      # 2. Archive old posts (>180 days)
-      - name: Archive outdated content
+      # Archive old posts
+      - name: Move outdated content
         run: |
-          # Create quarterly archive folder (e.g., 2024/Q3)
           mkdir -p docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))
-          
-          # Move old files (safe for spaces in filenames)
-          find docs/news/current/ -name "*.html" ! -name "index.html" -mtime +180 -print0 | \
-            xargs -0 -I {} mv {} docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))/
+          find docs/news/current/ -name "*.html" ! -name "index.html" -mtime +180 -exec mv {} docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))/ \;
 
-      # 3. Rebuild indexes
-      - name: Update indexes
+      # Update indexes in your preferred format
+      - name: Update Current Index
         run: |
-          # Current News Index
-          echo '<!DOCTYPE html><html><head><title>Current ROMs</title></head><body><ul>' > docs/news/current/index.html
-          find docs/news/current/ -maxdepth 1 -name "*.html" ! -name "index.html" | sort | while read file; do
-            clean_name=$(basename "$file" .html | sed 's/-/ /g')
-            echo "<li><a href='$(basename "$file")'>$clean_name</a></li>" >> docs/news/current/index.html
-          done
-          echo '</ul></body></html>' >> docs/news/current/index.html
+          cat > docs/news/current/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Current Stuff</title>
+            <link rel="stylesheet" href="../../assets/crt.css">
+          </head>
+          <body>
+            <div class="container">
+              <h1>> Current Stuff_</h1>
+              <ul>
+          EOF
 
-          # Archived News Index
-          echo '<!DOCTYPE html><html><head><title>Archived ROMs</title></head><body><ul>' > docs/news/archived/index.html
+          # Add current posts to index
+          find docs/news/current/ -maxdepth 1 -name "*.html" ! -name "index.html" | while read file; do
+            title=$(basename "$file" .html | sed -E 's/(.*)-([^-]+)$/\1 by \2/' | sed 's/-/ /g')
+            echo "        <li><a href=\"$(basename "$file")\">$title</a></li>" >> docs/news/current/index.html
+          done
+
+          cat >> docs/news/current/index.html << 'EOF'
+              </ul>
+              <p>> <a href="../">Back to home</a>_</p>
+            </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Update Archive Index
+        run: |
+          cat > docs/news/archived/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Archived Stuff</title>
+            <link rel="stylesheet" href="../../assets/crt.css">
+          </head>
+          <body>
+            <div class="container">
+              <h1>> Archived Stuff_</h1>
+              <ul>
+          EOF
+
+          # Add archived posts to index
           find docs/news/archived/ -name "*.html" ! -name "index.html" | sort -r | while read file; do
             rel_path=${file#docs/news/archived/}
-            clean_name=$(basename "$file" .html | sed 's/-/ /g')
-            year=$(echo "$rel_path" | cut -d'/' -f1)
-            echo "<li><a href='$rel_path'>$clean_name</a> <small>($year)</small></li>" >> docs/news/archived/index.html
+            title=$(basename "$file" .html | sed -E 's/(.*)-([^-]+)$/\1 by \2/' | sed 's/-/ /g')
+            year=$(dirname "$rel_path" | cut -d'/' -f1)
+            echo "        <li><a href=\"$rel_path\">$title</a> <small>($year)</small></li>" >> docs/news/archived/index.html
           done
-          echo '</ul></body></html>' >> docs/news/archived/index.html
 
-      # 4. Commit and push changes
-      - name: Push updates
+          cat >> docs/news/archived/index.html << 'EOF'
+              </ul>
+              <p>> <a href="../">Back to home</a>_</p>
+            </div>
+          </body>
+          </html>
+          EOF
+
+      - name: Commit and push changes
         run: |
           git config --global user.name "Backup Bot"
           git config --global user.email "backup@exynos-news"
