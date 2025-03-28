@@ -1,65 +1,42 @@
-name: Content Archival System
+name: Auto-Archive
 on:
   schedule:
-    - cron: '0 0 * * 0'  # Weekly on Sunday at midnight UTC
-  workflow_dispatch:      # Manual trigger option
-
-env:
-  DOCS_DIR: './docs'      # Root of GitHub Pages content
-  RETENTION_DAYS: 180     # Archive content older than 6 months
+    - cron: '0 0 * * 0'  # Sundays at midnight UTC
+  workflow_dispatch:      # Manual trigger
 
 jobs:
-  archive-content:
+  archive:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # Required for file history checks
+      - uses: actions/checkout@v4
 
-      - name: Set up archival environment
+      # 1. Archive old files
+      - name: Move outdated content
         run: |
-          # Create directories if they don't exist
-          mkdir -p ${{ env.DOCS_DIR }}/news/archived/
-          mkdir -p ${{ env.DOCS_DIR }}/videos/archived/
-          
-          # Generate archive index template
-          echo -e '<!DOCTYPE html>\n<html>\n<head>\n<title>Archived Content</title>\n<link rel="stylesheet" href="../../assets/crt.css">\n</head>\n<body>\n<div class="container">\n<h1>> Archived Content_</h1>\n<ul>' > ${{ env.DOCS_DIR }}/news/archived/index.html
+          mkdir -p docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))
+          find docs/news/current/ -name "*.html" ! -name "index.html" -mtime +180 \
+            -exec mv {} docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))/ \;
 
-      - name: Archive old news posts
+      # 2. Update indexes
+      - name: Regenerate indexes
         run: |
-          find ${{ env.DOCS_DIR }}/news/current/ -name '*.html' -type f -mtime +${{ env.RETENTION_DAYS }} | while read file; do
-            # Preserve directory structure in archives
-            relative_path="${file#${{ env.DOCS_DIR }}/news/current/}"
-            archive_path="${{ env.DOCS_DIR }}/news/archived/${relative_path}"
-            mkdir -p "$(dirname "$archive_path")"
-            mv "$file" "$archive_path"
-            
-            # Add to archive index
-            echo "<li><a href='${relative_path}'>${relative_path}</a></li>" >> ${{ env.DOCS_DIR }}/news/archived/index.html
+          # Current index
+          echo '<ul>' > docs/news/current/index.html
+          find docs/news/current/ -maxdepth 1 -name "*.html" ! -name "index.html" | while read file; do
+            echo "<li><a href='$(basename "$file")'>$(basename "$file" .html)</a></li>" >> docs/news/current/index.html
           done
 
-      - name: Archive old videos
-        run: |
-          find ${{ env.DOCS_DIR }}/videos/current/ -name '*.html' -type f -mtime +${{ env.RETENTION_DAYS }} | while read file; do
-            relative_path="${file#${{ env.DOCS_DIR }}/videos/current/}"
-            archive_path="${{ env.DOCS_DIR }}/videos/archived/${relative_path}"
-            mkdir -p "$(dirname "$archive_path")"
-            mv "$file" "$archive_path"
+          # Archive index
+          echo '<ul>' > docs/news/archived/index.html
+          find docs/news/archived/ -name "*.html" ! -path "*/index.html" | while read file; do
+            rel_path=${file#docs/news/archived/}
+            echo "<li><a href='$rel_path'>$rel_path</a></li>" >> docs/news/archived/index.html
           done
 
-      - name: Finalize archive index
+      # 3. Push changes
+      - name: Commit updates
         run: |
-          echo -e '</ul>\n<p>> <a href="../../">Back to terminal</a>_</p>\n</div>\n</body>\n</html>' >> ${{ env.DOCS_DIR }}/news/archived/index.html
-          
-          # Create video archive index
-          cp ${{ env.DOCS_DIR }}/news/archived/index.html ${{ env.DOCS_DIR }}/videos/archived/index.html
-          sed -i 's|Archived Content|Archived Videos|g' ${{ env.DOCS_DIR }}/videos/archived/index.html
-
-      - name: Commit and push changes
-        run: |
-          git config --global user.name "Exynos-News Archival Bot"
-          git config --global user.email "archival@exynos-news"
+          git config --global user.name "Auto-Archiver"
           git add .
-          git commit -m "🤖 Auto-archive: $(date +'%Y-%m-%d')"
+          git commit -m "🔧 Auto-archive $(date +%F)"
           git push
