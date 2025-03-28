@@ -1,18 +1,45 @@
-- name: Generate Indexes
-  run: |
-    # Generate CURRENT index
-    echo '<!DOCTYPE html><html><head><title>Current ROMs</title></head><body><ul>' > docs/news/current/index.html
-    find docs/news/current/ -maxdepth 1 -name '*.html' ! -name 'index.html' | while read file; do
-      title=$(basename "$file" .html | sed 's/-/ /g')
-      echo "<li><a href='$(basename "$file")'>$title</a></li>" >> docs/news/current/index.html
-    done
-    echo '</ul></body></html>' >> docs/news/current/index.html
+name: Backup System
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Sundays at midnight UTC
+  workflow_dispatch:      # Allow manual triggers
 
-    # Generate ARCHIVED index
-    echo '<!DOCTYPE html><html><head><title>Archived ROMs</title></head><body><ul>' > docs/news/archived/index.html
-    find docs/news/archived/ -type f -name '*.html' ! -name 'index.html' | while read file; do
-      rel_path=${file#docs/news/archived/}
-      title=$(basename "$file" .html | sed 's/-/ /g')
-      echo "<li><a href='$rel_path'>$title</a></li>" >> docs/news/archived/index.html
-    done
-    echo '</ul></body></html>' >> docs/news/archived/index.html
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. Archive old content
+      - name: Move outdated posts
+        run: |
+          mkdir -p docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))
+          find docs/news/current/ -name "*.html" ! -name "index.html" -mtime +180 \
+            -exec mv {} docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))/ \;
+
+      # 2. Rebuild indexes
+      - name: Update indexes
+        run: |
+          # Current News Index
+          echo '<!DOCTYPE html><html><head><title>Current</title></head><body><ul>' > docs/news/current/index.html
+          find docs/news/current/ -maxdepth 1 -name "*.html" ! -name "index.html" | while read file; do
+            echo "<li><a href='$(basename "$file")'>$(basename "$file" .html | sed 's/-/ /g')</a></li>" >> docs/news/current/index.html
+          done
+          echo '</ul></body></html>' >> docs/news/current/index.html
+
+          # Archived News Index
+          echo '<!DOCTYPE html><html><head><title>Archives</title></head><body><ul>' > docs/news/archived/index.html
+          find docs/news/archived/ -name "*.html" ! -name "index.html" | while read file; do
+            rel_path=${file#docs/news/archived/}
+            echo "<li><a href='$rel_path'>$rel_path</a></li>" >> docs/news/archived/index.html
+          done
+          echo '</ul></body></html>' >> docs/news/archived/index.html
+
+      # 3. Push changes
+      - name: Commit updates
+        run: |
+          git config --global user.name "Backup Bot"
+          git config --global user.email "backup@exynos-news"
+          git add .
+          git commit -m "🤖 Auto-backup $(date +'%Y-%m-%d %H:%M')"
+          git push
