@@ -1,0 +1,17 @@
+/* GitHub-like code blocks */
+pre {
+  background: #161b22;
+  border-radius: 6px;
+  padding: 16px;
+  color: #c9d1d9;
+  font-family: 'JetBrains Mono', monospace;
+  overflow-x: auto;
+}
+
+code {
+  background: #161b22;
+  padding: 3px 5px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+}

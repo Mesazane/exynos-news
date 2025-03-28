@@ -1,0 +1,36 @@
+name: Archive System
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday
+  workflow_dispatch:
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Move old content to backups
+      - name: Archive old posts
+        run: |
+          mkdir -p backups/$(date +%Y)/Q$(($(date +%m)/3+1))
+          find docs/news/ -type f -mtime +180 -exec mv {} backups/$(date +%Y)/Q$(($(date +%m)/3+1))/ \;
+          find docs/videos/ -type f -mtime +180 -exec mv {} backups/$(date +%Y)/Q$(($(date +%m)/3+1))/ \;
+
+      # Create indexed archives
+      - name: Generate archive indexes
+        run: |
+          for year in $(ls backups/); do
+            echo "<!DOCTYPE html><html><head><title>Exynos-News $year Archive</title><link rel='stylesheet' href='../assets/crt.css'></head><body><div class='container'><h1>> $year Archive_</h1><ul>" > backups/$year/index.html
+            find backups/$year/ -type f -name "*.html" | sed 's|backups/||' | xargs -I {} echo "<li><a href='{}'>{}</a></li>" >> backups/$year/index.html
+            echo "</ul><a href='../../'>← Back to terminal</a></div></body></html>" >> backups/$year/index.html
+          done
+
+      # Commit changes
+      - name: Update repository
+        run: |
+          git config --global user.name "Exynos-News Archiver"
+          git config --global user.email "archiver@exynos-news"
+          git add .
+          git commit -m "Auto-archive: $(date +%Y-%m-%d)"
+          git push

@@ -1,0 +1,74 @@
+/* CRT Scanlines */
+body {
+  background: #0a0a0a;
+  color: #00ff41; /* Matrix green */
+  font-family: 'Courier New', monospace;
+  position: relative;
+  line-height: 1.5;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* Flickering scanlines */
+body::after {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    rgba(0, 0, 0, 0) 50%, 
+    rgba(0, 0, 0, 0.25) 50%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  animation: scanline 8s linear infinite;
+  z-index: 9999;
+}
+
+@keyframes scanline {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-100vh); }
+}
+
+/* GitHub-inspired repos */
+.repo-list {
+  margin: 30px 0;
+  border-left: 2px solid #238636;
+  padding-left: 20px;
+}
+
+.repo {
+  margin-bottom: 15px;
+}
+
+.archive-notice {
+  color: #ffa500; /* Orange */
+  border-left: 3px solid #ffa500;
+  padding-left: 10px;
+  font-size: 0.9em;
+}
+
+.file-tree a {
+  color: #58a6ff;
+  text-decoration: none;
+}
+
+.file-tree a:hover {
+  text-decoration: underline;
+}
+
+.repo h3 a {
+  color: #58a6ff; /* GitHub link blue */
+  text-decoration: none;
+}
+
+.repo h3 a:hover {
+  text-decoration: underline;
+}
+
+/* Blinking cursor */
+.blink {
+  animation: blink 1s
