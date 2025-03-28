@@ -4,20 +4,22 @@ on:
     - cron: '0 0 * * 0'  # Weekly on Sunday
   workflow_dispatch:
 
+env:
+  REPO_OWNER: Sexynos990
+  REPO_NAME: exynos-news
+
 jobs:
   archive:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # Move old content to backups
       - name: Archive old posts
         run: |
           mkdir -p backups/$(date +%Y)/Q$(($(date +%m)/3+1))
           find docs/news/ -type f -mtime +180 -exec mv {} backups/$(date +%Y)/Q$(($(date +%m)/3+1))/ \;
           find docs/videos/ -type f -mtime +180 -exec mv {} backups/$(date +%Y)/Q$(($(date +%m)/3+1))/ \;
 
-      # Create indexed archives
       - name: Generate archive indexes
         run: |
           for year in $(ls backups/); do
@@ -26,11 +28,10 @@ jobs:
             echo "</ul><a href='../../'>← Back to terminal</a></div></body></html>" >> backups/$year/index.html
           done
 
-      # Commit changes
       - name: Update repository
         run: |
-          git config --global user.name "Exynos-News Archiver"
-          git config --global user.email "archiver@exynos-news"
+          git config --global user.name "Sexynos990 Archival Bot"
+          git config --global user.email "archiver@sexynos990"
           git add .
           git commit -m "Auto-archive: $(date +%Y-%m-%d)"
-          git push
+          git push https://${{ github.token }}@github.com/${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}.git

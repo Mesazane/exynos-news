@@ -1,16 +1,16 @@
-/* CRT Scanlines */
+/* CRT Base Styles */
 body {
   background: #0a0a0a;
-  color: #00ff41; /* Matrix green */
+  color: #00ff41;
   font-family: 'Courier New', monospace;
-  position: relative;
   line-height: 1.5;
   max-width: 900px;
   margin: 0 auto;
   padding: 20px;
+  position: relative;
 }
 
-/* Flickering scanlines */
+/* Scanline Effect */
 body::after {
   content: "";
   position: fixed;
@@ -18,10 +18,7 @@ body::after {
   left: 0;
   width: 100%;
   height: 100%;
-  background: linear-gradient(
-    rgba(0, 0, 0, 0) 50%, 
-    rgba(0, 0, 0, 0.25) 50%
-  );
+  background: linear-gradient(rgba(0,0,0,0) 50%, rgba(0,0,0,0.25) 50%);
   background-size: 100% 4px;
   pointer-events: none;
   animation: scanline 8s linear infinite;
@@ -33,7 +30,16 @@ body::after {
   100% { transform: translateY(-100vh); }
 }
 
-/* GitHub-inspired repos */
+/* Terminal Elements */
+.blink {
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
 .repo-list {
   margin: 30px 0;
   border-left: 2px solid #238636;
@@ -44,11 +50,20 @@ body::after {
   margin-bottom: 15px;
 }
 
+/* Archive Specific */
 .archive-notice {
-  color: #ffa500; /* Orange */
+  background: #161b22;
   border-left: 3px solid #ffa500;
-  padding-left: 10px;
+  padding: 10px;
+  margin: 20px 0;
   font-size: 0.9em;
+}
+
+.archive-frame {
+  border: 1px solid #30363d;
+  padding: 20px;
+  margin-top: 15px;
+  background: #0d1117;
 }
 
 .file-tree a {
@@ -59,16 +74,3 @@ body::after {
 .file-tree a:hover {
   text-decoration: underline;
 }
-
-.repo h3 a {
-  color: #58a6ff; /* GitHub link blue */
-  text-decoration: none;
-}
-
-.repo h3 a:hover {
-  text-decoration: underline;
-}
-
-/* Blinking cursor */
-.blink {
-  animation: blink 1s
