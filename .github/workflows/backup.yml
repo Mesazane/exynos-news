@@ -1,45 +1,51 @@
 name: Backup System
 on:
   schedule:
-    - cron: '0 0 * * 0'  # Sundays at midnight UTC
-  workflow_dispatch:      # Allow manual triggers
+    - cron: '0 0 * * 0'  # Sundays midnight UTC
+  workflow_dispatch:
 
 jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
+      # 1. Checkout with PAT auth
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 0
 
-      # 1. Archive old content
-      - name: Move outdated posts
+      # 2. Archive old posts (180+ days)
+      - name: Move outdated content
         run: |
           mkdir -p docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))
-          find docs/news/current/ -name "*.html" ! -name "index.html" -mtime +180 \
-            -exec mv {} docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))/ \;
+          find docs/news/current/ -name "*.html" ! -name "index.html" -mtime +180 -print0 | \
+            xargs -0 -I {} mv {} docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))/
 
-      # 2. Rebuild indexes
+      # 3. Rebuild indexes
       - name: Update indexes
         run: |
-          # Current News Index
+          # Current index
           echo '<!DOCTYPE html><html><head><title>Current</title></head><body><ul>' > docs/news/current/index.html
-          find docs/news/current/ -maxdepth 1 -name "*.html" ! -name "index.html" | while read file; do
-            echo "<li><a href='$(basename "$file")'>$(basename "$file" .html | sed 's/-/ /g')</a></li>" >> docs/news/current/index.html
-          done
+          find docs/news/current/ -maxdepth 1 -name "*.html" ! -name "index.html" -print0 | \
+            xargs -0 -I {} bash -c 'f="{}"; title=$(basename "$f" .html | sed "s/-/ /g"); \
+            echo "<li><a href=\"$(basename "$f")\">$title</a></li>"' >> docs/news/current/index.html
           echo '</ul></body></html>' >> docs/news/current/index.html
 
-          # Archived News Index
+          # Archive index
           echo '<!DOCTYPE html><html><head><title>Archives</title></head><body><ul>' > docs/news/archived/index.html
-          find docs/news/archived/ -name "*.html" ! -name "index.html" | while read file; do
-            rel_path=${file#docs/news/archived/}
-            echo "<li><a href='$rel_path'>$rel_path</a></li>" >> docs/news/archived/index.html
-          done
+          find docs/news/archived/ -name "*.html" ! -name "index.html" -print0 | \
+            xargs -0 -I {} bash -c 'f="{}"; rel=${f#docs/news/archived/}; \
+            title=$(basename "$f" .html | sed "s/-/ /g"); \
+            echo "<li><a href=\"$rel\">$title</a> <small>(${rel%%/*})</small></li>"' >> docs/news/archived/index.html
           echo '</ul></body></html>' >> docs/news/archived/index.html
 
-      # 3. Push changes
-      - name: Commit updates
+      # 4. Commit changes
+      - name: Push updates
+        env:
+          REPO_PAT: ${{ secrets.REPO_PAT }}
         run: |
           git config --global user.name "Backup Bot"
           git config --global user.email "backup@exynos-news"
           git add .
           git commit -m "🤖 Auto-backup $(date +'%Y-%m-%d %H:%M')"
-          git push
+          git push "https://$REPO_PAT@github.com/Sexynos990/exynos-news.git" HEAD:main
