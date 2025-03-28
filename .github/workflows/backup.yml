@@ -1,37 +1,65 @@
-name: Archive System
+name: Content Archival System
 on:
   schedule:
-    - cron: '0 0 * * 0'  # Weekly on Sunday
-  workflow_dispatch:
+    - cron: '0 0 * * 0'  # Weekly on Sunday at midnight UTC
+  workflow_dispatch:      # Manual trigger option
 
 env:
-  REPO_OWNER: Sexynos990
-  REPO_NAME: exynos-news
+  DOCS_DIR: './docs'      # Root of GitHub Pages content
+  RETENTION_DAYS: 180     # Archive content older than 6 months
 
 jobs:
-  archive:
+  archive-content:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # Required for file history checks
 
-      - name: Archive old posts
+      - name: Set up archival environment
         run: |
-          mkdir -p backups/$(date +%Y)/Q$(($(date +%m)/3+1))
-          find docs/news/ -type f -mtime +180 -exec mv {} backups/$(date +%Y)/Q$(($(date +%m)/3+1))/ \;
-          find docs/videos/ -type f -mtime +180 -exec mv {} backups/$(date +%Y)/Q$(($(date +%m)/3+1))/ \;
+          # Create directories if they don't exist
+          mkdir -p ${{ env.DOCS_DIR }}/news/archived/
+          mkdir -p ${{ env.DOCS_DIR }}/videos/archived/
+          
+          # Generate archive index template
+          echo -e '<!DOCTYPE html>\n<html>\n<head>\n<title>Archived Content</title>\n<link rel="stylesheet" href="../../assets/crt.css">\n</head>\n<body>\n<div class="container">\n<h1>> Archived Content_</h1>\n<ul>' > ${{ env.DOCS_DIR }}/news/archived/index.html
 
-      - name: Generate archive indexes
+      - name: Archive old news posts
         run: |
-          for year in $(ls backups/); do
-            echo "<!DOCTYPE html><html><head><title>Exynos-News $year Archive</title><link rel='stylesheet' href='../assets/crt.css'></head><body><div class='container'><h1>> $year Archive_</h1><ul>" > backups/$year/index.html
-            find backups/$year/ -type f -name "*.html" | sed 's|backups/||' | xargs -I {} echo "<li><a href='{}'>{}</a></li>" >> backups/$year/index.html
-            echo "</ul><a href='../../'>← Back to terminal</a></div></body></html>" >> backups/$year/index.html
+          find ${{ env.DOCS_DIR }}/news/current/ -name '*.html' -type f -mtime +${{ env.RETENTION_DAYS }} | while read file; do
+            # Preserve directory structure in archives
+            relative_path="${file#${{ env.DOCS_DIR }}/news/current/}"
+            archive_path="${{ env.DOCS_DIR }}/news/archived/${relative_path}"
+            mkdir -p "$(dirname "$archive_path")"
+            mv "$file" "$archive_path"
+            
+            # Add to archive index
+            echo "<li><a href='${relative_path}'>${relative_path}</a></li>" >> ${{ env.DOCS_DIR }}/news/archived/index.html
           done
 
-      - name: Update repository
+      - name: Archive old videos
         run: |
-          git config --global user.name "Sexynos990 Archival Bot"
-          git config --global user.email "archiver@sexynos990"
+          find ${{ env.DOCS_DIR }}/videos/current/ -name '*.html' -type f -mtime +${{ env.RETENTION_DAYS }} | while read file; do
+            relative_path="${file#${{ env.DOCS_DIR }}/videos/current/}"
+            archive_path="${{ env.DOCS_DIR }}/videos/archived/${relative_path}"
+            mkdir -p "$(dirname "$archive_path")"
+            mv "$file" "$archive_path"
+          done
+
+      - name: Finalize archive index
+        run: |
+          echo -e '</ul>\n<p>> <a href="../../">Back to terminal</a>_</p>\n</div>\n</body>\n</html>' >> ${{ env.DOCS_DIR }}/news/archived/index.html
+          
+          # Create video archive index
+          cp ${{ env.DOCS_DIR }}/news/archived/index.html ${{ env.DOCS_DIR }}/videos/archived/index.html
+          sed -i 's|Archived Content|Archived Videos|g' ${{ env.DOCS_DIR }}/videos/archived/index.html
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "Exynos-News Archival Bot"
+          git config --global user.email "archival@exynos-news"
           git add .
-          git commit -m "Auto-archive: $(date +%Y-%m-%d)"
-          git push https://${{ github.token }}@github.com/${{ env.REPO_OWNER }}/${{ env.REPO_NAME }}.git
+          git commit -m "🤖 Auto-archive: $(date +'%Y-%m-%d')"
+          git push
