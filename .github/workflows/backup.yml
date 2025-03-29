@@ -16,84 +16,66 @@ jobs:
           persist-credentials: true
           fetch-depth: 0
 
-      # Archive old posts (preserves original timestamps)
-      - name: Move outdated content
+      # Archive old posts (single command)
+      - name: Archive outdated
         run: |
           mkdir -p docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))
-          find docs/news/current/ -name "*.html" ! -name "index.html" -mtime +180 -exec mv {} docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))/ \;
+          find docs/news/current/ -name "*.html" ! -name "index.html" -mtime +180 -exec mv -t docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))/ {} +
 
-      # Unified index generation with filesystem dates
-      - name: Update All Indexes with File Dates
+      # Unified index generation
+      - name: Rebuild indexes
         run: |
-          # Current Posts Index
-          cat > docs/news/current/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>Current Stuff</title>
-            <link rel="stylesheet" href="../../assets/crt.css">
-          </head>
-          <body>
-            <div class="container">
-              <h1>> Current Stuff_</h1>
-              <ul>
-          EOF
+          # Shared functions
+          html_header() {
+            echo "<!DOCTYPE html>
+            <html>
+            <head>
+              <title>$1</title>
+              <link rel=\"stylesheet\" href=\"../../assets/crt.css\">
+            </head>
+            <body>
+              <div class=\"container\">
+                <h1>> $1_</h1>
+                <ul>"
+          }
 
-          # Process current posts sorted by modification date (newest first)
-          find docs/news/current/ -maxdepth 1 -name "*.html" ! -name "index.html" -printf "%T@ %p\n" | 
-            sort -nr | 
-            cut -d' ' -f2- | 
-            while read file; do
-              title=$(basename "$file" .html | sed 's/-/ /g')
+          html_footer() {
+            echo "    </ul>
+                <p>> <a href=\"../\">Back to home</a>_</p>
+              </div>
+            </body>
+            </html>"
+          }
+
+          process_files() {
+            find "$1" -name "*.html" ! -name "index.html" -printf "%T@\t%p\n" |
+            sort -nr |
+            cut -f2- |
+            while IFS= read -r file; do
+              title=$(basename "${file%.html}" | tr '-' ' ')
               date=$(date -r "$file" +"%Y-%m-%d")
-              echo "        <li><a href=\"$(basename "$file")\">$title</a> <small>| $date</small></li>" >> docs/news/current/index.html
+              if [ "$1" = "docs/news/current" ]; then
+                echo "      <li><a href=\"$(basename "$file")\">$title</a> <small>| $date</small></li>"
+              else
+                echo "      <li><a href=\"${file#docs/news/archived/}\">$title</a> <small>| $date</small></li>"
+              fi
             done
+          }
 
-          cat >> docs/news/current/index.html << 'EOF'
-              </ul>
-              <p>> <a href="../">Back to home</a>_</p>
-            </div>
-          </body>
-          </html>
-          EOF
+          # Current index
+          html_header "Current Stuff" > docs/news/current/index.html
+          process_files "docs/news/current" >> docs/news/current/index.html
+          html_footer >> docs/news/current/index.html
 
-          # Archived Posts Index
-          cat > docs/news/archived/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-            <title>Archived Stuff</title>
-            <link rel="stylesheet" href="../../assets/crt.css">
-          </head>
-          <body>
-            <div class="container">
-              <h1>> Archived Stuff_</h1>
-              <ul>
-          EOF
+          # Archive index
+          html_header "Archived Stuff" > docs/news/archived/index.html
+          process_files "docs/news/archived" >> docs/news/archived/index.html
+          html_footer >> docs/news/archived/index.html
 
-          # Process archived posts sorted by modification date (newest first)
-          find docs/news/archived/ -name "*.html" ! -name "index.html" -printf "%T@ %p\n" | 
-            sort -nr | 
-            cut -d' ' -f2- | 
-            while read file; do
-              rel_path=${file#docs/news/archived/}
-              title=$(basename "$file" .html | sed 's/-/ /g')
-              date=$(date -r "$file" +"%Y-%m-%d")
-              echo "        <li><a href=\"$rel_path\">$title</a> <small>| $date</small></li>" >> docs/news/archived/index.html
-            done
-
-          cat >> docs/news/archived/index.html << 'EOF'
-              </ul>
-              <p>> <a href="../">Back to home</a>_</p>
-            </div>
-          </body>
-          </html>
-          EOF
-
-      - name: Commit and push changes
+      - name: Commit changes
         run: |
           git config --global user.name "Backup Bot"
           git config --global user.email "backup@exynos-news"
           git add .
-          git commit -m "Auto index $(date +'%Y-%m-%d %H:%M')"
+          git commit -m "Auto Index $(date +'%Y-%m-%d')"
           git push
