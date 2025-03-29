@@ -18,7 +18,7 @@
     <!-- HEADER SECTION -->
     <header class="post-header">
       <h1>> GrapheneOS Alpha Released for Samsung Galaxy A21_</h1>
-      <p>For: Samsung Galaxy A21 (SM-A217F) | GrapheneOS Alpha</p>
+      <p>For: [A21] (SM-A217F) | [Nullvalue's Try of GrapheneOS Alpha on A21] </p>
       <p>Published: 2025-03-29</p>
     </header>
 
@@ -43,6 +43,12 @@
       </div>
     </article>
 
+      <h2>> XDA link_</h2>
+      <a href="https://forum.xda-developers.com/t/grapheneos-alpha-for-samsung-galaxy-a21.4248172/" target="_blank">
+        XDA Forum Thread
+      </a>
+      <br>
+      <br>
     <!-- FOOTER -->
     <footer class="post-footer">
       <p><a href="../index.html">Back to News Index</a>_</p>
