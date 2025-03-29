@@ -16,14 +16,14 @@ jobs:
           persist-credentials: true
           fetch-depth: 0
 
-      # Archive old posts
+      # Archive old posts (preserves original timestamps)
       - name: Move outdated content
         run: |
           mkdir -p docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))
           find docs/news/current/ -name "*.html" ! -name "index.html" -mtime +180 -exec mv {} docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))/ \;
 
-      # Unified index generation
-      - name: Update All Indexes
+      # Unified index generation with filesystem dates
+      - name: Update All Indexes with File Dates
         run: |
           # Current Posts Index
           cat > docs/news/current/index.html << 'EOF'
@@ -39,10 +39,15 @@ jobs:
               <ul>
           EOF
 
-          find docs/news/current/ -maxdepth 1 -name "*.html" ! -name "index.html" | sort -r | while read file; do
-            title=$(basename "$file" .html | sed 's/-/ /g')
-            echo "        <li><a href=\"$(basename "$file")\">$title</a></li>" >> docs/news/current/index.html
-          done
+          # Process current posts sorted by modification date (newest first)
+          find docs/news/current/ -maxdepth 1 -name "*.html" ! -name "index.html" -printf "%T@ %p\n" | 
+            sort -nr | 
+            cut -d' ' -f2- | 
+            while read file; do
+              title=$(basename "$file" .html | sed 's/-/ /g')
+              date=$(date -r "$file" +"%Y-%m-%d")
+              echo "        <li><a href=\"$(basename "$file")\">$title</a> <small>| $date</small></li>" >> docs/news/current/index.html
+            done
 
           cat >> docs/news/current/index.html << 'EOF'
               </ul>
@@ -66,12 +71,16 @@ jobs:
               <ul>
           EOF
 
-          find docs/news/archived/ -name "*.html" ! -name "index.html" | sort -r | while read file; do
-            rel_path=${file#docs/news/archived/}
-            title=$(basename "$file" .html | sed 's/-/ /g')
-            year=$(dirname "$rel_path" | cut -d'/' -f1)
-            echo "        <li><a href=\"$rel_path\">$title</a> <small>($year)</small></li>" >> docs/news/archived/index.html
-          done
+          # Process archived posts sorted by modification date (newest first)
+          find docs/news/archived/ -name "*.html" ! -name "index.html" -printf "%T@ %p\n" | 
+            sort -nr | 
+            cut -d' ' -f2- | 
+            while read file; do
+              rel_path=${file#docs/news/archived/}
+              title=$(basename "$file" .html | sed 's/-/ /g')
+              date=$(date -r "$file" +"%Y-%m-%d")
+              echo "        <li><a href=\"$rel_path\">$title</a> <small>| $date</small></li>" >> docs/news/archived/index.html
+            done
 
           cat >> docs/news/archived/index.html << 'EOF'
               </ul>
@@ -86,5 +95,5 @@ jobs:
           git config --global user.name "Backup Bot"
           git config --global user.email "backup@exynos-news"
           git add .
-          git commit -m "Auto-index $(date +'%Y-%m-%d %H:%M')"
+          git commit -m "Auto index $(date +'%Y-%m-%d %H:%M')"
           git push
