@@ -22,9 +22,10 @@ jobs:
           mkdir -p docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))
           find docs/news/current/ -name "*.html" ! -name "index.html" -mtime +180 -exec mv {} docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))/ \;
 
-      # Update indexes in your preferred format
-      - name: Update Current Index
+      # Unified index generation
+      - name: Update All Indexes
         run: |
+          # Current Posts Index
           cat > docs/news/current/index.html << 'EOF'
           <!DOCTYPE html>
           <html>
@@ -38,9 +39,8 @@ jobs:
               <ul>
           EOF
 
-          # Add current posts to index
-          find docs/news/current/ -maxdepth 1 -name "*.html" ! -name "index.html" | while read file; do
-            title=$(basename "$file" .html | sed -E 's/(.*)-([^-]+)$/\1 by \2/' | sed 's/-/ /g')
+          find docs/news/current/ -maxdepth 1 -name "*.html" ! -name "index.html" | sort -r | while read file; do
+            title=$(basename "$file" .html | sed 's/-/ /g')
             echo "        <li><a href=\"$(basename "$file")\">$title</a></li>" >> docs/news/current/index.html
           done
 
@@ -52,8 +52,7 @@ jobs:
           </html>
           EOF
 
-      - name: Update Archive Index
-        run: |
+          # Archived Posts Index
           cat > docs/news/archived/index.html << 'EOF'
           <!DOCTYPE html>
           <html>
@@ -67,10 +66,9 @@ jobs:
               <ul>
           EOF
 
-          # Add archived posts to index
           find docs/news/archived/ -name "*.html" ! -name "index.html" | sort -r | while read file; do
             rel_path=${file#docs/news/archived/}
-            title=$(basename "$file" .html | sed -E 's/(.*)-([^-]+)$/\1 by \2/' | sed 's/-/ /g')
+            title=$(basename "$file" .html | sed 's/-/ /g')
             year=$(dirname "$rel_path" | cut -d'/' -f1)
             echo "        <li><a href=\"$rel_path\">$title</a> <small>($year)</small></li>" >> docs/news/archived/index.html
           done
@@ -88,5 +86,5 @@ jobs:
           git config --global user.name "Backup Bot"
           git config --global user.email "backup@exynos-news"
           git add .
-          git commit -m "🤖 Auto-backup $(date +'%Y-%m-%d %H:%M')"
+          git commit -m "Auto-index $(date +'%Y-%m-%d %H:%M')"
           git push
