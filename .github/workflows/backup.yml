@@ -1,81 +1,116 @@
-name: Backup System
+name: AutoFix Indexing System
 on:
   schedule:
-    - cron: '0 0 * * 0'  # Sundays midnight UTC
+    - cron: '0 0 * * *'  # Daily at midnight UTC
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  backup:
+  autofix:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: true
           fetch-depth: 0
 
-      # Archive old posts (single command)
-      - name: Archive outdated
+      - name: Setup environment
         run: |
-          mkdir -p docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))
-          find docs/news/current/ -name "*.html" ! -name "index.html" -mtime +180 -exec mv -t docs/news/archived/$(date +%Y)/Q$(($(date +%m)/3+1))/ {} +
+          sudo apt-get -qq update
+          sudo apt-get -qq install git-date-extractor jq
+          pip3 -q install beautifulsoup4 python-dateutil
 
-      # Unified index generation
-      - name: Rebuild indexes
+      - name: Nuclear cleanup
         run: |
-          # Shared functions
-          html_header() {
-            echo "<!DOCTYPE html>
-            <html>
-            <head>
-              <title>$1</title>
-              <link rel=\"stylesheet\" href=\"../../assets/crt.css\">
-            </head>
-            <body>
-              <div class=\"container\">
-                <h1>> $1_</h1>
-                <ul>"
+          rm -f docs/news/_index.json
+          git rm --cached docs/news/_index.json || true
+
+      - name: Generate indestructible index
+        run: |
+          cat << 'EOF' > robust_index.py
+          import os
+          import re
+          import json
+          import subprocess
+          from bs4 import BeautifulSoup
+          from dateutil.parser import parse
+
+          class AutoFix:
+              @staticmethod
+              def get_date(filepath):
+                  methods = [
+                      AutoFix._html_header_date,
+                      AutoFix._git_creation_date,
+                      AutoFix._filename_date,
+                      AutoFix._mtime_date
+                  ]
+                  for method in methods:
+                      date = method(filepath)
+                      if date: return date
+                  return "1970-01-01"
+
+              @staticmethod
+              def _html_header_date(filepath):
+                  try:
+                      with open(filepath) as f:
+                          soup = BeautifulSoup(f, 'html.parser')
+                          header = soup.find('header')
+                          if header:
+                              return re.search(r'\d{4}-\d{2}-\d{2}', header.text).group()
+                  except:
+                      return None
+
+              @staticmethod
+              def _git_creation_date(filepath):
+                  result = subprocess.run(['git', 'log', '--diff-filter=A', '--format=%aI', '--', filepath], 
+                                      capture_output=True, text=True)
+                  dates = result.stdout.strip().split('\n')
+                  return parse(dates[-1]).strftime('%Y-%m-%d') if dates else None
+
+              @staticmethod
+              def _filename_date(filepath):
+                  match = re.search(r'\d{4}-\d{2}-\d{2}', os.path.basename(filepath))
+                  return match.group() if match else None
+
+              @staticmethod
+              def _mtime_date(filepath):
+                  return parse(str(os.path.getmtime(filepath))).strftime('%Y-%m-%d')
+
+          posts = []
+          for root, _, files in os.walk('docs/news'):
+              for file in files:
+                  if file == 'index.html': continue
+                  if file.endswith('.html'):
+                      path = os.path.join(root, file)
+                      try:
+                          with open(path) as f:
+                              title = BeautifulSoup(f.read(), 'html.parser').title.text
+                              title = title.replace('| Exynos-News', '').strip()
+                      except:
+                          title = os.path.basename(file).replace('.html', '')
+                      
+                      posts.append({
+                          'path': path.replace('docs/news/', ''),
+                          'title': title,
+                          'date': AutoFix.get_date(path)
+                      })
+
+          # Ensure valid JSON even if empty
+          with open('docs/news/_index.json', 'w') as f:
+              json.dump({'posts': sorted(posts, key=lambda x: x['date'], reverse=True)}, f, indent=2)
+          EOF
+
+          python3 robust_index.py
+
+      - name: Validate & force push
+        run: |
+          # Ensure JSON validity at gunpoint
+          jq empty docs/news/_index.json || {
+            echo '{"posts": []}' > docs/news/_index.json
           }
 
-          html_footer() {
-            echo "    </ul>
-                <p>> <a href=\"../\">Back to home</a>_</p>
-              </div>
-            </body>
-            </html>"
-          }
-
-          process_files() {
-            find "$1" -name "*.html" ! -name "index.html" -printf "%T@\t%p\n" |
-            sort -nr |
-            cut -f2- |
-            while IFS= read -r file; do
-              title=$(basename "${file%.html}" | tr '-' ' ')
-              date=$(date -r "$file" +"%Y-%m-%d")
-              if [ "$1" = "docs/news/current" ]; then
-                echo "      <li><a href=\"$(basename "$file")\">$title</a> <small>| $date</small></li>"
-              else
-                echo "      <li><a href=\"${file#docs/news/archived/}\">$title</a> <small>| $date</small></li>"
-              fi
-            done
-          }
-
-          # Current index
-          html_header "Current Stuff" > docs/news/current/index.html
-          process_files "docs/news/current" >> docs/news/current/index.html
-          html_footer >> docs/news/current/index.html
-
-          # Archive index
-          html_header "Archived Stuff" > docs/news/archived/index.html
-          process_files "docs/news/archived" >> docs/news/archived/index.html
-          html_footer >> docs/news/archived/index.html
-
-      - name: Commit changes
-        run: |
-          git config --global user.name "Backup Bot"
-          git config --global user.email "backup@exynos-news"
-          git add .
-          git commit -m "Auto Index $(date +'%Y-%m-%d')"
-          git push
+          git config --global user.name "AutoFix Bot"
+          git config --global user.email "autofix@exynos-news"
+          git add docs/news/_index.json
+          git commit -m "NUCLEAR INDEX FIX $(date +'%Y-%m-%d %H:%M')"
+          git push --force
